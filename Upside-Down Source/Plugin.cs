@@ -3,6 +3,11 @@ using System;
 using UnityEngine;
 using Utilla;
 using Photon.Pun;
+using System.IO;
+using System.Reflection;
+using GravitySwitch;
+using Bepinject;
+using System.ComponentModel;
 
 namespace GravitySwitch
 {
@@ -11,9 +16,14 @@ namespace GravitySwitch
     [ModdedGamemode]
     public class Plugin : BaseUnityPlugin
     {
+        public static Plugin instance;
+
+        private string fileLocation = string.Format("{0}/SaveDataUpsidedown", Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location));
+        private SaveDataUpsidedown saveData;
 
         public bool inAllowedRoom = false;
-        
+
+        public bool modEnabled = false;
         public float normalGravity;
         public Quaternion normalPlayerRotation;
         public Quaternion normalOnlinePlayerRotation;
@@ -25,7 +35,29 @@ namespace GravitySwitch
         {
             HarmonyPatches.ApplyHarmonyPatches();
 
+            instance = this;
+            Zenjector.Install<ModInstaller>().OnProject();
+
             Utilla.Events.GameInitialized += GameInitialized;
+
+            try
+            {
+                if (File.Exists(fileLocation))
+                {
+                    saveData = JsonUtility.FromJson<SaveDataUpsidedown>(File.ReadAllText(fileLocation));
+                    modEnabled = saveData.enabled;
+                }
+                else
+                {
+                    saveData.enabled = modEnabled;
+                }
+            }
+            catch
+            {
+                modEnabled = saveData.enabled;
+            }
+
+            
         }
 
         void Update()
@@ -35,9 +67,9 @@ namespace GravitySwitch
         void FixedUpdate()
         {
 
-            
 
-            if (PhotonNetwork.InRoom && inAllowedRoom)
+
+            if (PhotonNetwork.InRoom && inAllowedRoom && modEnabled)
             {
                 leftHand.transform.position = GorillaLocomotion.Player.Instance.leftHandTransform.position;
                 rightHand.transform.position = GorillaLocomotion.Player.Instance.rightHandTransform.position;
@@ -78,7 +110,10 @@ namespace GravitySwitch
         private void RoomJoined(string gamemode)
         {
             // The room is modded. Enable mod stuff.
-            ChangeGravity();
+            if (modEnabled)
+            {
+                ChangeGravity();
+            }
             inAllowedRoom = true;
         }
 
@@ -97,7 +132,7 @@ namespace GravitySwitch
             normalGravity = Physics.gravity.y;
         }
 
-        static public void HideOnlineRig()
+        public void HideOnlineRig()
         {
             GameObject online_face = GameObject.Find("GorillaParent/GorillaVRRigs/Gorilla Player Networked(Clone)/rig/body/head/gorillaface");
             GameObject online_body = GameObject.Find("GorillaParent/GorillaVRRigs/Gorilla Player Networked(Clone)/gorilla");
@@ -108,7 +143,7 @@ namespace GravitySwitch
             online_chest.GetComponent<MeshRenderer>().forceRenderingOff = true;
         }
 
-        static public void HideOfflineRig()
+        public void HideOfflineRig()
         {
             GameObject offline_face = GameObject.Find("OfflineVRRig/Actual Gorilla/rig/body/head/gorillaface");
             offline_face.GetComponent<Renderer>().forceRenderingOff = true;
@@ -122,7 +157,7 @@ namespace GravitySwitch
 
         }
 
-        static public void ShowOfflineRig()
+        public void ShowOfflineRig()
         {
             GameObject offline_face = GameObject.Find("OfflineVRRig/Actual Gorilla/rig/body/head/gorillaface");
             offline_face.GetComponent<Renderer>().forceRenderingOff = false;
@@ -135,5 +170,25 @@ namespace GravitySwitch
             offline_chest.GetComponent<Renderer>().forceRenderingOff = false;
 
         }
+
+        public void ShowOnlineRig()
+        {
+            GameObject online_face = GameObject.Find("GorillaParent/GorillaVRRigs/Gorilla Player Networked(Clone)/rig/body/head/gorillaface");
+            GameObject online_body = GameObject.Find("GorillaParent/GorillaVRRigs/Gorilla Player Networked(Clone)/gorilla");
+            GameObject online_chest = GameObject.Find("GorillaParent/GorillaVRRigs/Gorilla Player Networked(Clone)/rig/body/gorillachest");
+
+            online_face.GetComponent<MeshRenderer>().forceRenderingOff = false;
+            online_body.GetComponent<SkinnedMeshRenderer>().forceRenderingOff = false;
+            online_chest.GetComponent<MeshRenderer>().forceRenderingOff = false;
+        }
+
+        public void ToggleMod()
+        {
+            modEnabled = !modEnabled;
+
+            saveData.enabled = modEnabled;
+            File.WriteAllText(fileLocation, JsonUtility.ToJson(saveData));
+        }
+
     }
 }
